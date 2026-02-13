@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrailMapper PWA</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>TrailMapper</h1>
+      <p class="muted">
+        Upload file(s) from trail export (image + optional JSON), click matching source/map points, then solve affine
+        georeference in metre units.
+      </p>
+
+      <section class="panel">
+        <label for="fileInput">Select source file(s)</label>
+        <input id="fileInput" type="file" multiple accept="image/*,.json" />
+        <p id="importStatus">No files loaded yet.</p>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2>Source export view</h2>
+          <canvas id="sourceCanvas" width="720" height="520"></canvas>
+          <p>Click image to set source point for selected pair.</p>
+        </article>
+        <article class="panel">
+          <h2>Reference map view</h2>
+          <label for="basemapSelect">Basemap</label>
+          <select id="basemapSelect">
+            <option value="osm" selected>OpenStreetMap</option>
+            <option value="satellite">Satellite (Esri World Imagery)</option>
+          </select>
+          <div id="map"></div>
+          <p>Click map to set georeference point for selected pair.</p>
+          <p id="mapStatus" class="muted">Map default: Powell River, BC fallback center.</p>
+        </article>
+      </section>
+
+      <section class="panel">
+        <button id="addPairBtn">Add pair</button>
+        <button id="exportPairsBtn">Export pairs JSON</button>
+        <div id="pairButtons"></div>
+        <p id="exportStatus" class="muted"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Georeference result (Affine)</h2>
+        <p id="fitStatus">Need 3 completed point pairs.</p>
+        <pre id="fitParams"></pre>
+        <ul id="residuals"></ul>
+      </section>
+
+      <section class="panel assumptions">
+        <h3>Import assumptions</h3>
+        <ul>
+          <li>JSON may include <code>points:[{x,y}]</code> or <code>controlPoints:[{sourceX,sourceY}]</code>.</li>
+          <li>Units are assumed to be metres (or convertible to metres upstream).</li>
+          <li>Schema may evolve; importer is intentionally tolerant and ignores unknown fields.</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
