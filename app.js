@@ -27,7 +27,7 @@ let markers = [];
 const sourceThumbCache = new Map();
 const mapThumbCache = new Map();
 const THUMB_SIZE = 120;
-let metersPerPixel = 0.05;
+let metresPerPixel = 0.05;
 let sourceView = null;
 let dragState = null;
 const sourceCanvasWrap = canvas.parentElement;
@@ -223,9 +223,10 @@ fileInput.addEventListener('change', async (evt) => {
       sourceThumbCache.clear();
       mapThumbCache.clear();
     }
-    if (Number.isFinite(parsed.metersPerPixel) && parsed.metersPerPixel > 0) {
-      metersPerPixel = parsed.metersPerPixel;
-      sourceScaleInput.value = String(metersPerPixel);
+    const parsedMetresPerPixel = parsed.metresPerPixel ?? parsed.metersPerPixel;
+    if (Number.isFinite(parsedMetresPerPixel) && parsedMetresPerPixel > 0) {
+      metresPerPixel = parsedMetresPerPixel;
+      sourceScaleInput.value = String(metresPerPixel);
     }
     importStatus.textContent = `Imported ${imported.length} source points. Units: ${parsed.units || 'assumed metres'}.`;
   } else {
@@ -242,10 +243,10 @@ fileInput.addEventListener('change', async (evt) => {
 sourceScaleInput.addEventListener('change', () => {
   const value = Number.parseFloat(sourceScaleInput.value);
   if (!Number.isFinite(value) || value <= 0) {
-    sourceScaleInput.value = String(metersPerPixel);
+    sourceScaleInput.value = String(metresPerPixel);
     return;
   }
-  metersPerPixel = value;
+  metresPerPixel = value;
   solveAndRender();
   drawCanvas();
 });
@@ -277,7 +278,7 @@ exportPairsBtn.addEventListener('click', () => {
     exportedAt: new Date().toISOString(),
     schemaVersion: 1,
     units: 'metres',
-    metersPerPixel,
+    metresPerPixel,
     pairs: completePairs.map((pair) => ({
       id: pair.id,
       source: pair.source,
@@ -523,7 +524,7 @@ function drawCanvas() {
     ctx.fillText(String(pair.id), x + 8, y - 12);
   });
 
-  sourceViewStatus.textContent = `Source view: zoom ${(view.zoom * 100).toFixed(0)}%, offset (${view.offsetX.toFixed(1)}, ${view.offsetY.toFixed(1)}), scale ${metersPerPixel.toFixed(4)} m/px.`;
+  sourceViewStatus.textContent = `Source view: zoom ${(view.zoom * 100).toFixed(0)}%, offset (${view.offsetX.toFixed(1)}, ${view.offsetY.toFixed(1)}), scale ${metresPerPixel.toFixed(4)} m/px.`;
 }
 
 function refreshMarkers() {
@@ -747,8 +748,8 @@ function solveAndRender() {
   const b = [];
   complete.forEach((pair) => {
     const s = pair.source;
-    const scaledX = s.x * metersPerPixel;
-    const scaledY = s.y * metersPerPixel;
+    const scaledX = s.x * metresPerPixel;
+    const scaledY = s.y * metresPerPixel;
     const t = toMeters(pair.target.lat, pair.target.lng);
     A.push([scaledX, scaledY, 1, 0, 0, 0]);
     b.push(t.x);
@@ -778,8 +779,8 @@ function solveAndRender() {
 
   const residuals = complete.map((pair) => {
     const s = pair.source;
-    const sx = s.x * metersPerPixel;
-    const sy = s.y * metersPerPixel;
+    const sx = s.x * metresPerPixel;
+    const sy = s.y * metresPerPixel;
     const t = toMeters(pair.target.lat, pair.target.lng);
     const x = params[0] * sx + params[1] * sy + params[2];
     const y = params[3] * sx + params[4] * sy + params[5];
