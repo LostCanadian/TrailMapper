@@ -16,15 +16,12 @@
         georeference in metre units.
       </p>
 
-      <section class="panel">
-        <label for="fileInput">Select source file(s)</label>
-        <input id="fileInput" type="file" multiple accept="image/*,.json" />
-        <p id="importStatus">No files loaded yet.</p>
-      </section>
-
       <section class="grid">
         <article class="panel">
-          <h2>Source export view</h2>
+          <h2>Trail View</h2>
+          <label for="fileInput">Select source file(s)</label>
+          <input id="fileInput" type="file" multiple accept="image/*,.json" />
+          <p id="importStatus">No files loaded yet.</p>
           <div class="source-controls">
             <label for="sourceScaleInput">Scale (metres per pixel)</label>
             <input id="sourceScaleInput" type="number" min="0.000001" step="0.0001" value="1" />
@@ -41,7 +38,16 @@
           <p>Click image to set source point for selected pair. Drag to pan; mouse wheel/trackpad to zoom.</p>
         </article>
         <article class="panel">
-          <h2>Reference map view</h2>
+          <h2>Map View</h2>
+          <div class="map-controls">
+            <label for="gpxInput">Import GPX track</label>
+            <input id="gpxInput" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" />
+            <label class="checkbox-inline" for="showGpxTrack">
+              <input id="showGpxTrack" type="checkbox" checked disabled />
+              Show GPX overlay
+            </label>
+            <p id="gpxStatus" class="muted">No GPX loaded.</p>
+          </div>
           <label for="basemapSelect">Basemap</label>
           <select id="basemapSelect">
             <option value="osm">OpenStreetMap</option>
