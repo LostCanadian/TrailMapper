@@ -2,7 +2,6 @@ const fileInput = document.getElementById('fileInput');
 const importStatus = document.getElementById('importStatus');
 const canvas = document.getElementById('sourceCanvas');
 const ctx = canvas.getContext('2d');
-const pairButtons = document.getElementById('pairButtons');
 const pairCards = document.getElementById('pairCards');
 const addPairBtn = document.getElementById('addPairBtn');
 const exportPairsBtn = document.getElementById('exportPairsBtn');
@@ -235,7 +234,6 @@ fileInput.addEventListener('change', async (evt) => {
       : 'No supported files selected.';
   }
 
-  renderPairButtons();
   renderPairCards();
   drawCanvas();
   solveAndRender();
@@ -269,22 +267,21 @@ addPairBtn.addEventListener('click', () => {
   const id = pairs.length ? Math.max(...pairs.map((p) => p.id)) + 1 : 1;
   pairs.push({ id });
   selectedPair = id;
-  renderPairButtons();
   renderPairCards();
   drawCanvas();
 });
 
 exportPairsBtn.addEventListener('click', () => {
+  const completePairs = pairs.filter((pair) => pair.source && pair.target);
   const exportPayload = {
     exportedAt: new Date().toISOString(),
     schemaVersion: 1,
     units: 'metres',
     metersPerPixel,
-    pairs: pairs.map((pair) => ({
+    pairs: completePairs.map((pair) => ({
       id: pair.id,
-      source: pair.source || null,
-      target: pair.target || null,
-      complete: Boolean(pair.source && pair.target)
+      source: pair.source,
+      target: pair.target
     }))
   };
 
@@ -298,8 +295,7 @@ exportPairsBtn.addEventListener('click', () => {
   anchor.remove();
   URL.revokeObjectURL(url);
 
-  const completeCount = exportPayload.pairs.filter((p) => p.complete).length;
-  exportStatus.textContent = `Exported ${exportPayload.pairs.length} pair(s), ${completeCount} complete.`;
+  exportStatus.textContent = `Exported ${exportPayload.pairs.length} complete pair(s).`;
 });
 
 canvas.addEventListener('pointerdown', (evt) => {
@@ -418,29 +414,29 @@ function drawSourcePin(x, y, color) {
   ctx.restore();
 }
 
-function renderPairButtons() {
-  pairButtons.innerHTML = '';
-  pairs.forEach((pair) => {
-    const btn = document.createElement('button');
-    const state = `${pair.source ? 'S' : '-'}${pair.target ? 'M' : '-'}`;
-    btn.textContent = `#${pair.id} ${state}`;
-    if (pair.id === selectedPair) btn.classList.add('active');
-    btn.onclick = () => {
-      selectedPair = pair.id;
-      renderPairButtons();
-      renderPairCards();
-      drawCanvas();
-    };
-    pairButtons.appendChild(btn);
-  });
-}
-
 function upsertPair(id, patch) {
   pairs = pairs.map((pair) => (pair.id === id ? { ...pair, ...patch } : pair));
   sourceThumbCache.delete(id);
   mapThumbCache.delete(id);
-  renderPairButtons();
   renderPairCards();
+}
+
+function deletePair(id) {
+  const nextPairs = pairs.filter((pair) => pair.id !== id);
+  if (!nextPairs.length) {
+    return;
+  }
+
+  pairs = nextPairs;
+  sourceThumbCache.delete(id);
+  mapThumbCache.delete(id);
+  if (!pairs.some((pair) => pair.id === selectedPair)) {
+    selectedPair = pairs[0].id;
+  }
+  renderPairCards();
+  refreshMarkers();
+  drawCanvas();
+  solveAndRender();
 }
 
 function loadImage(url) {
@@ -559,7 +555,6 @@ function renderPairCards() {
 
     card.addEventListener('click', () => {
       selectedPair = pair.id;
-      renderPairButtons();
       renderPairCards();
       drawCanvas();
     });
@@ -595,6 +590,19 @@ function renderPairCards() {
         <li>Elevation: ${elevationText}</li>
       </ul>
     `;
+
+    if (pair.id === selectedPair) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'delete-pair-btn';
+      deleteBtn.textContent = 'Delete pair';
+      deleteBtn.disabled = pairs.length <= 1;
+      deleteBtn.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        deletePair(pair.id);
+      });
+      card.appendChild(deleteBtn);
+    }
 
     pairCards.appendChild(card);
   });
@@ -809,7 +817,6 @@ function gaussJordan(a, b) {
 
 resizeCanvasToContainer();
 drawCanvas();
-renderPairButtons();
 renderPairCards();
 
 if ('serviceWorker' in navigator) {

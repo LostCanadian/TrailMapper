@@ -147,6 +147,12 @@ button.active { border-color: #22c55e; color: #22c55e; }
   margin-top: 0.2rem;
 }
 
+.delete-pair-btn {
+  margin-top: 0.6rem;
+  background: #3f1d1d;
+  border-color: #7f1d1d;
+}
+
 
 .map-pin-icon {
   background: transparent;
