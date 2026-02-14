@@ -25,8 +25,14 @@
       <section class="grid">
         <article class="panel">
           <h2>Source export view</h2>
+          <div class="source-controls">
+            <label for="sourceScaleInput">Scale (metres per pixel)</label>
+            <input id="sourceScaleInput" type="number" min="0.000001" step="0.0001" value="1" />
+            <button id="resetSourceViewBtn" type="button">Reset source view</button>
+          </div>
           <canvas id="sourceCanvas" width="720" height="520"></canvas>
-          <p>Click image to set source point for selected pair.</p>
+          <p id="sourceViewStatus" class="muted">Source view: zoom 100%, offset (0, 0).</p>
+          <p>Click image to set source point for selected pair. Drag to pan; mouse wheel/trackpad to zoom.</p>
         </article>
         <article class="panel">
           <h2>Reference map view</h2>

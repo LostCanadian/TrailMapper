@@ -11,11 +11,17 @@ const fitParams = document.getElementById('fitParams');
 const residualsEl = document.getElementById('residuals');
 const basemapSelect = document.getElementById('basemapSelect');
 const mapStatus = document.getElementById('mapStatus');
+const sourceScaleInput = document.getElementById('sourceScaleInput');
+const resetSourceViewBtn = document.getElementById('resetSourceViewBtn');
+const sourceViewStatus = document.getElementById('sourceViewStatus');
 
 let sourceImage = null;
 let pairs = [{ id: 1 }];
 let selectedPair = 1;
 let markers = [];
+let metersPerPixel = 1;
+let sourceView = null;
+let dragState = null;
 
 const fallbackCenter = [49.8352, -124.5247]; // Powell River, BC
 const fallbackZoom = 13;
@@ -29,7 +35,6 @@ const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/
 });
 
 osmLayer.addTo(map);
-
 
 if ('geolocation' in navigator) {
   navigator.geolocation.getCurrentPosition(
@@ -72,6 +77,7 @@ fileInput.addEventListener('change', async (evt) => {
 
   if (image) {
     sourceImage = await loadImage(URL.createObjectURL(image));
+    sourceView = null;
   }
 
   if (json) {
@@ -80,6 +86,10 @@ fileInput.addEventListener('change', async (evt) => {
     if (imported.length) {
       pairs = imported.map((point, index) => ({ id: index + 1, source: { x: point.x, y: point.y } }));
       selectedPair = 1;
+    }
+    if (Number.isFinite(parsed.metersPerPixel) && parsed.metersPerPixel > 0) {
+      metersPerPixel = parsed.metersPerPixel;
+      sourceScaleInput.value = String(metersPerPixel);
     }
     importStatus.textContent = `Imported ${imported.length} source points. Units: ${parsed.units || 'assumed metres'}.`;
   } else {
@@ -93,6 +103,22 @@ fileInput.addEventListener('change', async (evt) => {
   solveAndRender();
 });
 
+sourceScaleInput.addEventListener('change', () => {
+  const value = Number.parseFloat(sourceScaleInput.value);
+  if (!Number.isFinite(value) || value <= 0) {
+    sourceScaleInput.value = String(metersPerPixel);
+    return;
+  }
+  metersPerPixel = value;
+  solveAndRender();
+  drawCanvas();
+});
+
+resetSourceViewBtn.addEventListener('click', () => {
+  sourceView = null;
+  drawCanvas();
+});
+
 addPairBtn.addEventListener('click', () => {
   const id = pairs.length ? Math.max(...pairs.map((p) => p.id)) + 1 : 1;
   pairs.push({ id });
@@ -101,12 +127,12 @@ addPairBtn.addEventListener('click', () => {
   drawCanvas();
 });
 
-
 exportPairsBtn.addEventListener('click', () => {
   const exportPayload = {
     exportedAt: new Date().toISOString(),
     schemaVersion: 1,
     units: 'metres',
+    metersPerPixel,
     pairs: pairs.map((pair) => ({
       id: pair.id,
       source: pair.source || null,
@@ -129,23 +155,85 @@ exportPairsBtn.addEventListener('click', () => {
   exportStatus.textContent = `Exported ${exportPayload.pairs.length} pair(s), ${completeCount} complete.`;
 });
 
-canvas.addEventListener('click', (evt) => {
+canvas.addEventListener('pointerdown', (evt) => {
   if (!sourceImage) {
     return;
   }
-  const rect = canvas.getBoundingClientRect();
-  const cx = evt.clientX - rect.left;
-  const cy = evt.clientY - rect.top;
-  const frame = imageFrame();
-  const x = (cx - frame.x) / frame.scale;
-  const y = (cy - frame.y) / frame.scale;
-  if (x < 0 || y < 0 || x > sourceImage.width || y > sourceImage.height) {
+  const point = getCanvasPoint(evt);
+  dragState = {
+    startCanvasX: point.x,
+    startCanvasY: point.y,
+    startOffsetX: getView().offsetX,
+    startOffsetY: getView().offsetY,
+    moved: false,
+    pointerId: evt.pointerId
+  };
+  canvas.setPointerCapture(evt.pointerId);
+});
+
+canvas.addEventListener('pointermove', (evt) => {
+  if (!dragState || dragState.pointerId !== evt.pointerId) {
     return;
   }
-  upsertPair(selectedPair, { source: { x, y } });
+  const point = getCanvasPoint(evt);
+  const dx = point.x - dragState.startCanvasX;
+  const dy = point.y - dragState.startCanvasY;
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+    dragState.moved = true;
+  }
+  const view = getView();
+  view.offsetX = dragState.startOffsetX + dx;
+  view.offsetY = dragState.startOffsetY + dy;
   drawCanvas();
-  solveAndRender();
 });
+
+canvas.addEventListener('pointerup', (evt) => {
+  if (!dragState || dragState.pointerId !== evt.pointerId) {
+    return;
+  }
+
+  const moved = dragState.moved;
+  dragState = null;
+  canvas.releasePointerCapture(evt.pointerId);
+
+  if (!moved) {
+    const point = getCanvasPoint(evt);
+    const sourcePoint = canvasToImage(point.x, point.y);
+    if (!sourcePoint) return;
+    upsertPair(selectedPair, { source: sourcePoint });
+    drawCanvas();
+    solveAndRender();
+  }
+});
+
+canvas.addEventListener('pointercancel', () => {
+  dragState = null;
+});
+
+canvas.addEventListener(
+  'wheel',
+  (evt) => {
+    if (!sourceImage) {
+      return;
+    }
+    evt.preventDefault();
+
+    const view = getView();
+    const point = getCanvasPoint(evt);
+    const before = canvasToImage(point.x, point.y);
+    if (!before) return;
+
+    const zoomFactor = evt.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const nextZoom = Math.min(30, Math.max(view.minZoom, view.zoom * zoomFactor));
+    view.zoom = nextZoom;
+
+    const displayScale = baseFitScale() * view.zoom;
+    view.offsetX = point.x - before.x * displayScale;
+    view.offsetY = point.y - before.y * displayScale;
+    drawCanvas();
+  },
+  { passive: false }
+);
 
 function renderPairButtons() {
   pairButtons.innerHTML = '';
@@ -177,11 +265,48 @@ function loadImage(url) {
   });
 }
 
-function imageFrame() {
-  const scale = Math.min(canvas.width / sourceImage.width, canvas.height / sourceImage.height);
-  const width = sourceImage.width * scale;
-  const height = sourceImage.height * scale;
-  return { scale, x: (canvas.width - width) / 2, y: (canvas.height - height) / 2, width, height };
+function getCanvasPoint(evt) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (evt.clientX - rect.left) * scaleX,
+    y: (evt.clientY - rect.top) * scaleY
+  };
+}
+
+function baseFitScale() {
+  return Math.min(canvas.width / sourceImage.width, canvas.height / sourceImage.height);
+}
+
+function getView() {
+  if (!sourceImage) {
+    return null;
+  }
+  if (!sourceView) {
+    const scale = baseFitScale();
+    const width = sourceImage.width * scale;
+    const height = sourceImage.height * scale;
+    sourceView = {
+      zoom: 1,
+      minZoom: 0.3,
+      offsetX: (canvas.width - width) / 2,
+      offsetY: (canvas.height - height) / 2
+    };
+  }
+  return sourceView;
+}
+
+function canvasToImage(canvasX, canvasY) {
+  if (!sourceImage) return null;
+  const view = getView();
+  const displayScale = baseFitScale() * view.zoom;
+  const imageX = (canvasX - view.offsetX) / displayScale;
+  const imageY = (canvasY - view.offsetY) / displayScale;
+  if (imageX < 0 || imageY < 0 || imageX > sourceImage.width || imageY > sourceImage.height) {
+    return null;
+  }
+  return { x: imageX, y: imageY };
 }
 
 function drawCanvas() {
@@ -190,16 +315,21 @@ function drawCanvas() {
   if (!sourceImage) {
     ctx.fillStyle = '#94a3b8';
     ctx.fillText('Load an image file to begin.', 20, 30);
+    sourceViewStatus.textContent = 'Source view: load an image to enable zoom/pan and source point selection.';
     return;
   }
 
-  const frame = imageFrame();
-  ctx.drawImage(sourceImage, frame.x, frame.y, frame.width, frame.height);
+  const view = getView();
+  const drawScale = baseFitScale() * view.zoom;
+  const drawWidth = sourceImage.width * drawScale;
+  const drawHeight = sourceImage.height * drawScale;
+
+  ctx.drawImage(sourceImage, view.offsetX, view.offsetY, drawWidth, drawHeight);
 
   pairs.forEach((pair) => {
     if (!pair.source) return;
-    const x = frame.x + pair.source.x * frame.scale;
-    const y = frame.y + pair.source.y * frame.scale;
+    const x = view.offsetX + pair.source.x * drawScale;
+    const y = view.offsetY + pair.source.y * drawScale;
     ctx.fillStyle = pair.id === selectedPair ? '#22c55e' : '#38bdf8';
     ctx.beginPath();
     ctx.arc(x, y, 6, 0, Math.PI * 2);
@@ -207,6 +337,8 @@ function drawCanvas() {
     ctx.fillStyle = '#fff';
     ctx.fillText(String(pair.id), x + 8, y - 8);
   });
+
+  sourceViewStatus.textContent = `Source view: zoom ${(view.zoom * 100).toFixed(0)}%, offset (${view.offsetX.toFixed(1)}, ${view.offsetY.toFixed(1)}), scale ${metersPerPixel.toFixed(4)} m/px.`;
 }
 
 function refreshMarkers() {
@@ -238,10 +370,12 @@ function solveAndRender() {
   const b = [];
   complete.forEach((pair) => {
     const s = pair.source;
+    const scaledX = s.x * metersPerPixel;
+    const scaledY = s.y * metersPerPixel;
     const t = toMeters(pair.target.lat, pair.target.lng);
-    A.push([s.x, s.y, 1, 0, 0, 0]);
+    A.push([scaledX, scaledY, 1, 0, 0, 0]);
     b.push(t.x);
-    A.push([0, 0, 0, s.x, s.y, 1]);
+    A.push([0, 0, 0, scaledX, scaledY, 1]);
     b.push(t.y);
   });
 
@@ -267,9 +401,11 @@ function solveAndRender() {
 
   const residuals = complete.map((pair) => {
     const s = pair.source;
+    const sx = s.x * metersPerPixel;
+    const sy = s.y * metersPerPixel;
     const t = toMeters(pair.target.lat, pair.target.lng);
-    const x = params[0] * s.x + params[1] * s.y + params[2];
-    const y = params[3] * s.x + params[4] * s.y + params[5];
+    const x = params[0] * sx + params[1] * sy + params[2];
+    const y = params[3] * sx + params[4] * sy + params[5];
     return { id: pair.id, error: Math.hypot(x - t.x, y - t.y) };
   });
   const rms = Math.sqrt(residuals.reduce((sum, r) => sum + r.error ** 2, 0) / residuals.length);

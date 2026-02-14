@@ -26,6 +26,21 @@ main { padding: 1rem; }
   border: 1px solid #475569;
   border-radius: 8px;
 }
+.source-controls {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.source-controls input {
+  width: 8rem;
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #64748b;
+  border-radius: 6px;
+  padding: 0.3rem 0.4rem;
+}
 button {
   background: #1e293b;
   color: #e2e8f0;
