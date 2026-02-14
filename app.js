@@ -12,6 +12,9 @@ const fitParams = document.getElementById('fitParams');
 const residualsEl = document.getElementById('residuals');
 const basemapSelect = document.getElementById('basemapSelect');
 const mapStatus = document.getElementById('mapStatus');
+const gpxInput = document.getElementById('gpxInput');
+const showGpxTrack = document.getElementById('showGpxTrack');
+const gpxStatus = document.getElementById('gpxStatus');
 const sourceScaleInput = document.getElementById('sourceScaleInput');
 const resetSourceViewBtn = document.getElementById('resetSourceViewBtn');
 const sourceViewStatus = document.getElementById('sourceViewStatus');
@@ -33,6 +36,7 @@ const sourceCanvasWrap = canvas.parentElement;
 const fallbackCenter = [49.8352, -124.5247]; // Powell River, BC
 const fallbackZoom = 13;
 let elevationRequestId = 0;
+let gpxTrackLayer = null;
 
 const map = L.map('map').setView(fallbackCenter, fallbackZoom);
 const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -74,6 +78,38 @@ basemapSelect.addEventListener('change', (evt) => {
   renderPairCards();
 });
 
+gpxInput.addEventListener('change', async (evt) => {
+  const [gpxFile] = Array.from(evt.target.files || []);
+  if (!gpxFile) {
+    gpxStatus.textContent = 'No GPX loaded.';
+    return;
+  }
+
+  try {
+    const text = await gpxFile.text();
+    const coordinates = parseGpxTrack(text);
+    if (coordinates.length < 2) {
+      throw new Error('GPX must include at least two track points.');
+    }
+    setGpxTrack(coordinates);
+    gpxStatus.textContent = `Loaded ${coordinates.length} GPX points from ${gpxFile.name}.`;
+  } catch (error) {
+    gpxStatus.textContent = `Unable to read GPX: ${error.message}`;
+  }
+});
+
+showGpxTrack.addEventListener('change', () => {
+  if (!gpxTrackLayer) {
+    showGpxTrack.checked = false;
+    return;
+  }
+  if (showGpxTrack.checked) {
+    gpxTrackLayer.addTo(map);
+  } else {
+    map.removeLayer(gpxTrackLayer);
+  }
+});
+
 map.on('click', async (evt) => {
   const requestId = ++elevationRequestId;
   const lat = evt.latlng.lat;
@@ -101,6 +137,48 @@ map.on('click', async (evt) => {
   refreshMarkers();
   solveAndRender();
 });
+
+function parseGpxTrack(rawText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rawText, 'application/xml');
+  const parseError = doc.querySelector('parsererror');
+  if (parseError) {
+    throw new Error('Invalid GPX XML.');
+  }
+
+  const points = [
+    ...Array.from(doc.querySelectorAll('trkpt')),
+    ...Array.from(doc.querySelectorAll('rtept'))
+  ];
+
+  return points
+    .map((point) => ({
+      lat: Number.parseFloat(point.getAttribute('lat')),
+      lng: Number.parseFloat(point.getAttribute('lon'))
+    }))
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+}
+
+function setGpxTrack(coordinates) {
+  if (gpxTrackLayer) {
+    map.removeLayer(gpxTrackLayer);
+  }
+
+  gpxTrackLayer = L.polyline(coordinates, {
+    color: '#dbeafe',
+    weight: 4,
+    opacity: 0.25
+  });
+
+  showGpxTrack.disabled = false;
+  showGpxTrack.checked = true;
+  gpxTrackLayer.addTo(map);
+
+  const bounds = gpxTrackLayer.getBounds();
+  if (bounds.isValid()) {
+    map.fitBounds(bounds, { padding: [20, 20] });
+  }
+}
 
 async function lookupElevation(lat, lng) {
   const apiUrl = new URL('https://api.open-meteo.com/v1/elevation');

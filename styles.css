@@ -64,6 +64,17 @@ main { padding: 1rem; }
   flex-wrap: wrap;
   margin-bottom: 0.5rem;
 }
+
+.map-controls {
+  margin-bottom: 0.6rem;
+}
+
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
 .source-controls input {
   width: 8rem;
   background: #1e293b;
