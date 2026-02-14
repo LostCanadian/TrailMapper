@@ -84,3 +84,60 @@ button {
 button.active { border-color: #22c55e; color: #22c55e; }
 .muted { color: #94a3b8; }
 .assumptions code { color: #93c5fd; }
+
+.pair-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.pair-card {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0.6rem;
+  background: #111c33;
+  cursor: pointer;
+}
+
+.pair-card.active {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 1px #22c55e inset;
+}
+
+.pair-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.pair-views {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.pair-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #020617;
+}
+
+.pair-meta {
+  margin: 0.45rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.85rem;
+}
+
+.pair-meta li + li {
+  margin-top: 0.2rem;
+}
+
+
+.map-pin-icon {
+  background: transparent;
+  border: 0;
+}
