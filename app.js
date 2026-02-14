@@ -38,12 +38,21 @@ const fallbackZoom = 13;
 let elevationRequestId = 0;
 let gpxTrackLayer = null;
 
-const map = L.map('map').setView(fallbackCenter, fallbackZoom);
+const MAX_DISPLAY_ZOOM = 22;
+const MAX_NATIVE_TILE_ZOOM = 19;
+
+const map = L.map('map', {
+  maxZoom: MAX_DISPLAY_ZOOM
+}).setView(fallbackCenter, fallbackZoom);
 const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors'
+  attribution: '&copy; OpenStreetMap contributors',
+  maxNativeZoom: MAX_NATIVE_TILE_ZOOM,
+  maxZoom: MAX_DISPLAY_ZOOM
 });
 const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  attribution: 'Tiles &copy; Esri'
+  attribution: 'Tiles &copy; Esri',
+  maxNativeZoom: MAX_NATIVE_TILE_ZOOM,
+  maxZoom: MAX_DISPLAY_ZOOM
 });
 
 satelliteLayer.addTo(map);
@@ -665,7 +674,7 @@ function getMapThumbnail(pair) {
   cc.fillStyle = '#0f172a';
   cc.fillRect(0, 0, THUMB_SIZE, THUMB_SIZE);
 
-  const zoom = Math.max(2, Math.min(18, map.getZoom()));
+  const zoom = Math.max(2, Math.min(MAX_NATIVE_TILE_ZOOM, map.getZoom()));
   const centerTile = latLngToTileXY(pair.target.lat, pair.target.lng, zoom);
   const centerPx = { x: centerTile.x * 256, y: centerTile.y * 256 };
   const startPx = { x: centerPx.x - THUMB_SIZE / 2, y: centerPx.y - THUMB_SIZE / 2 };
