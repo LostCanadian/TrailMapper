@@ -165,9 +165,9 @@ function setGpxTrack(coordinates) {
   }
 
   gpxTrackLayer = L.polyline(coordinates, {
-    color: '#dbeafe',
+    color: '#facc15',
     weight: 4,
-    opacity: 0.25
+    opacity: 0.4
   });
 
   showGpxTrack.disabled = false;
