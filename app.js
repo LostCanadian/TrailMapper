@@ -14,6 +14,8 @@ const mapStatus = document.getElementById('mapStatus');
 const sourceScaleInput = document.getElementById('sourceScaleInput');
 const resetSourceViewBtn = document.getElementById('resetSourceViewBtn');
 const sourceViewStatus = document.getElementById('sourceViewStatus');
+const zoomInSourceBtn = document.getElementById('zoomInSourceBtn');
+const zoomOutSourceBtn = document.getElementById('zoomOutSourceBtn');
 
 let sourceImage = null;
 let pairs = [{ id: 1 }];
@@ -22,6 +24,7 @@ let markers = [];
 let metersPerPixel = 1;
 let sourceView = null;
 let dragState = null;
+const sourceCanvasWrap = canvas.parentElement;
 
 const fallbackCenter = [49.8352, -124.5247]; // Powell River, BC
 const fallbackZoom = 13;
@@ -119,6 +122,14 @@ resetSourceViewBtn.addEventListener('click', () => {
   drawCanvas();
 });
 
+zoomInSourceBtn.addEventListener('click', () => applyZoom(1.1));
+zoomOutSourceBtn.addEventListener('click', () => applyZoom(1 / 1.1));
+
+window.addEventListener('resize', () => {
+  resizeCanvasToContainer();
+  drawCanvas();
+});
+
 addPairBtn.addEventListener('click', () => {
   const id = pairs.length ? Math.max(...pairs.map((p) => p.id)) + 1 : 1;
   pairs.push({ id });
@@ -157,6 +168,7 @@ exportPairsBtn.addEventListener('click', () => {
 
 canvas.addEventListener('pointerdown', (evt) => {
   if (!sourceImage) {
+    fileInput.click();
     return;
   }
   const point = getCanvasPoint(evt);
@@ -218,22 +230,58 @@ canvas.addEventListener(
     }
     evt.preventDefault();
 
-    const view = getView();
     const point = getCanvasPoint(evt);
     const before = canvasToImage(point.x, point.y);
     if (!before) return;
 
     const zoomFactor = evt.deltaY < 0 ? 1.1 : 1 / 1.1;
-    const nextZoom = Math.min(30, Math.max(view.minZoom, view.zoom * zoomFactor));
-    view.zoom = nextZoom;
-
-    const displayScale = baseFitScale() * view.zoom;
-    view.offsetX = point.x - before.x * displayScale;
-    view.offsetY = point.y - before.y * displayScale;
-    drawCanvas();
+    applyZoom(zoomFactor, point, before);
   },
   { passive: false }
 );
+
+function resizeCanvasToContainer() {
+  const rect = sourceCanvasWrap.getBoundingClientRect();
+  const displayWidth = Math.max(1, Math.round(rect.width));
+  const displayHeight = Math.max(1, Math.round(rect.height));
+  if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+  }
+}
+
+function applyZoom(zoomFactor, anchorPoint = null, imagePoint = null) {
+  if (!sourceImage) return;
+  const view = getView();
+  const pivot = anchorPoint || { x: canvas.width / 2, y: canvas.height / 2 };
+  const sourcePivot = imagePoint || canvasToImage(pivot.x, pivot.y);
+  if (!sourcePivot) return;
+
+  const nextZoom = Math.min(30, Math.max(view.minZoom, view.zoom * zoomFactor));
+  view.zoom = nextZoom;
+
+  const displayScale = baseFitScale() * view.zoom;
+  view.offsetX = pivot.x - sourcePivot.x * displayScale;
+  view.offsetY = pivot.y - sourcePivot.y * displayScale;
+  drawCanvas();
+}
+
+function drawSourcePin(x, y, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, -11);
+  ctx.arc(0, -11, 7, Math.PI, 0, false);
+  ctx.quadraticCurveTo(7, -2, 0, 11);
+  ctx.quadraticCurveTo(-7, -2, 0, -11);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(0, -11, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
 
 function renderPairButtons() {
   pairButtons.innerHTML = '';
@@ -314,7 +362,11 @@ function drawCanvas() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (!sourceImage) {
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Load an image file to begin.', 20, 30);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Load an image file to begin.', canvas.width / 2, canvas.height / 2);
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
     sourceViewStatus.textContent = 'Source view: load an image to enable zoom/pan and source point selection.';
     return;
   }
@@ -330,10 +382,8 @@ function drawCanvas() {
     if (!pair.source) return;
     const x = view.offsetX + pair.source.x * drawScale;
     const y = view.offsetY + pair.source.y * drawScale;
-    ctx.fillStyle = pair.id === selectedPair ? '#22c55e' : '#38bdf8';
-    ctx.beginPath();
-    ctx.arc(x, y, 6, 0, Math.PI * 2);
-    ctx.fill();
+    const markerColor = pair.id === selectedPair ? '#22c55e' : '#38bdf8';
+    drawSourcePin(x, y, markerColor);
     ctx.fillStyle = '#fff';
     ctx.fillText(String(pair.id), x + 8, y - 8);
   });
@@ -438,6 +488,7 @@ function gaussJordan(a, b) {
   return b;
 }
 
+resizeCanvasToContainer();
 drawCanvas();
 renderPairButtons();
 
