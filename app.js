@@ -3,6 +3,7 @@ const importStatus = document.getElementById('importStatus');
 const canvas = document.getElementById('sourceCanvas');
 const ctx = canvas.getContext('2d');
 const pairButtons = document.getElementById('pairButtons');
+const pairCards = document.getElementById('pairCards');
 const addPairBtn = document.getElementById('addPairBtn');
 const exportPairsBtn = document.getElementById('exportPairsBtn');
 const exportStatus = document.getElementById('exportStatus');
@@ -21,6 +22,9 @@ let sourceImage = null;
 let pairs = [{ id: 1 }];
 let selectedPair = 1;
 let markers = [];
+const sourceThumbCache = new Map();
+const mapThumbCache = new Map();
+const THUMB_SIZE = 120;
 let metersPerPixel = 1;
 let sourceView = null;
 let dragState = null;
@@ -56,6 +60,7 @@ if ('geolocation' in navigator) {
 }
 
 basemapSelect.addEventListener('change', (evt) => {
+  mapThumbCache.clear();
   const value = evt.target.value;
   if (map.hasLayer(osmLayer)) map.removeLayer(osmLayer);
   if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
@@ -65,10 +70,13 @@ basemapSelect.addEventListener('change', (evt) => {
   } else {
     osmLayer.addTo(map);
   }
+  renderPairCards();
 });
 
 map.on('click', (evt) => {
-  upsertPair(selectedPair, { target: { lat: evt.latlng.lat, lng: evt.latlng.lng } });
+  upsertPair(selectedPair, {
+    target: { lat: evt.latlng.lat, lng: evt.latlng.lng, elevation: evt.latlng.alt ?? null }
+  });
   refreshMarkers();
   solveAndRender();
 });
@@ -81,6 +89,7 @@ fileInput.addEventListener('change', async (evt) => {
   if (image) {
     sourceImage = await loadImage(URL.createObjectURL(image));
     sourceView = null;
+    sourceThumbCache.clear();
   }
 
   if (json) {
@@ -89,6 +98,8 @@ fileInput.addEventListener('change', async (evt) => {
     if (imported.length) {
       pairs = imported.map((point, index) => ({ id: index + 1, source: { x: point.x, y: point.y } }));
       selectedPair = 1;
+      sourceThumbCache.clear();
+      mapThumbCache.clear();
     }
     if (Number.isFinite(parsed.metersPerPixel) && parsed.metersPerPixel > 0) {
       metersPerPixel = parsed.metersPerPixel;
@@ -102,6 +113,7 @@ fileInput.addEventListener('change', async (evt) => {
   }
 
   renderPairButtons();
+  renderPairCards();
   drawCanvas();
   solveAndRender();
 });
@@ -135,6 +147,7 @@ addPairBtn.addEventListener('click', () => {
   pairs.push({ id });
   selectedPair = id;
   renderPairButtons();
+  renderPairCards();
   drawCanvas();
 });
 
@@ -271,14 +284,13 @@ function drawSourcePin(x, y, color) {
   ctx.translate(x, y);
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(0, -11);
-  ctx.arc(0, -11, 7, Math.PI, 0, false);
-  ctx.quadraticCurveTo(7, -2, 0, 11);
-  ctx.quadraticCurveTo(-7, -2, 0, -11);
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(8, -10, 9, -20, 0, -28);
+  ctx.bezierCurveTo(-9, -20, -8, -10, 0, 0);
   ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(0, -11, 2.5, 0, Math.PI * 2);
+  ctx.arc(0, -18, 3, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -293,6 +305,7 @@ function renderPairButtons() {
     btn.onclick = () => {
       selectedPair = pair.id;
       renderPairButtons();
+      renderPairCards();
       drawCanvas();
     };
     pairButtons.appendChild(btn);
@@ -301,7 +314,10 @@ function renderPairButtons() {
 
 function upsertPair(id, patch) {
   pairs = pairs.map((pair) => (pair.id === id ? { ...pair, ...patch } : pair));
+  sourceThumbCache.delete(id);
+  mapThumbCache.delete(id);
   renderPairButtons();
+  renderPairCards();
 }
 
 function loadImage(url) {
@@ -385,7 +401,7 @@ function drawCanvas() {
     const markerColor = pair.id === selectedPair ? '#22c55e' : '#38bdf8';
     drawSourcePin(x, y, markerColor);
     ctx.fillStyle = '#fff';
-    ctx.fillText(String(pair.id), x + 8, y - 8);
+    ctx.fillText(String(pair.id), x + 8, y - 12);
   });
 
   sourceViewStatus.textContent = `Source view: zoom ${(view.zoom * 100).toFixed(0)}%, offset (${view.offsetX.toFixed(1)}, ${view.offsetY.toFixed(1)}), scale ${metersPerPixel.toFixed(4)} m/px.`;
@@ -396,9 +412,189 @@ function refreshMarkers() {
   markers = [];
   pairs.forEach((pair) => {
     if (!pair.target) return;
-    const marker = L.marker([pair.target.lat, pair.target.lng]).addTo(map).bindPopup(`Pair #${pair.id}`);
+    const marker = L.marker([pair.target.lat, pair.target.lng], {
+      icon: L.divIcon({
+        className: 'map-pin-icon',
+        html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"><path d="M12 32C12 32 22 19 22 12C22 5.37258 17.5228 0 12 0C6.47715 0 2 5.37258 2 12C2 19 12 32 12 32Z" fill="#38bdf8"/><circle cx="12" cy="12" r="4" fill="white"/></svg>`,
+        iconSize: [24, 32],
+        iconAnchor: [12, 32]
+      })
+    }).addTo(map).bindPopup(`Pair #${pair.id}`);
     markers.push(marker);
   });
+}
+
+function renderPairCards() {
+  pairCards.innerHTML = '';
+  pairs.forEach((pair) => {
+    const card = document.createElement('article');
+    card.className = `pair-card ${pair.id === selectedPair ? 'active' : ''}`;
+    card.dataset.pairId = String(pair.id);
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', `Select point pair ${pair.id}`);
+
+    card.addEventListener('click', () => {
+      selectedPair = pair.id;
+      renderPairButtons();
+      renderPairCards();
+      drawCanvas();
+    });
+
+    const sourceThumb = getSourceThumbnail(pair);
+    const mapThumb = getMapThumbnail(pair);
+
+    const sourceText = pair.source
+      ? `x=${pair.source.x.toFixed(2)}, y=${pair.source.y.toFixed(2)} px`
+      : 'not set';
+    const targetText = pair.target
+      ? `lat=${pair.target.lat.toFixed(6)}, lng=${pair.target.lng.toFixed(6)}`
+      : 'not set';
+    const elevationText = Number.isFinite(pair.target?.elevation)
+      ? `${pair.target.elevation.toFixed(2)} m`
+      : '—';
+
+    card.innerHTML = `
+      <h3>Pair #${pair.id}</h3>
+      <div class="pair-views">
+        <div>
+          <img class="pair-thumb" src="${sourceThumb}" alt="Source thumbnail for pair ${pair.id}" />
+          <div class="muted">Image point</div>
+        </div>
+        <div>
+          <img class="pair-thumb" src="${mapThumb}" alt="Map thumbnail for pair ${pair.id}" />
+          <div class="muted">Reference point</div>
+        </div>
+      </div>
+      <ul class="pair-meta">
+        <li>Image location: ${sourceText}</li>
+        <li>Map location: ${targetText}</li>
+        <li>Elevation: ${elevationText}</li>
+      </ul>
+    `;
+
+    pairCards.appendChild(card);
+  });
+}
+
+function getPlaceholderThumb(label) {
+  const c = document.createElement('canvas');
+  c.width = THUMB_SIZE;
+  c.height = THUMB_SIZE;
+  const cc = c.getContext('2d');
+  cc.fillStyle = '#020617';
+  cc.fillRect(0, 0, THUMB_SIZE, THUMB_SIZE);
+  cc.strokeStyle = '#475569';
+  cc.strokeRect(0.5, 0.5, THUMB_SIZE - 1, THUMB_SIZE - 1);
+  cc.fillStyle = '#94a3b8';
+  cc.font = '12px sans-serif';
+  cc.textAlign = 'center';
+  cc.textBaseline = 'middle';
+  cc.fillText(label, THUMB_SIZE / 2, THUMB_SIZE / 2);
+  return c.toDataURL('image/png');
+}
+
+function drawCrosshair(cc, color) {
+  cc.strokeStyle = color;
+  cc.lineWidth = 1.5;
+  cc.beginPath();
+  cc.moveTo(THUMB_SIZE / 2, 10);
+  cc.lineTo(THUMB_SIZE / 2, THUMB_SIZE - 10);
+  cc.moveTo(10, THUMB_SIZE / 2);
+  cc.lineTo(THUMB_SIZE - 10, THUMB_SIZE / 2);
+  cc.stroke();
+}
+
+function getSourceThumbnail(pair) {
+  if (!pair.source || !sourceImage) return getPlaceholderThumb('No source');
+  if (sourceThumbCache.has(pair.id)) return sourceThumbCache.get(pair.id);
+
+  const c = document.createElement('canvas');
+  c.width = THUMB_SIZE;
+  c.height = THUMB_SIZE;
+  const cc = c.getContext('2d');
+
+  const cropSize = Math.min(120, sourceImage.width, sourceImage.height);
+  const sx = Math.max(0, Math.min(sourceImage.width - cropSize, pair.source.x - cropSize / 2));
+  const sy = Math.max(0, Math.min(sourceImage.height - cropSize, pair.source.y - cropSize / 2));
+
+  cc.drawImage(sourceImage, sx, sy, cropSize, cropSize, 0, 0, THUMB_SIZE, THUMB_SIZE);
+  drawCrosshair(cc, '#22c55e');
+  const data = c.toDataURL('image/png');
+  sourceThumbCache.set(pair.id, data);
+  return data;
+}
+
+function latLngToTileXY(lat, lng, zoom) {
+  const scale = 2 ** zoom;
+  const x = ((lng + 180) / 360) * scale;
+  const latRad = (lat * Math.PI) / 180;
+  const y = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale;
+  return { x, y };
+}
+
+function getTileTemplate() {
+  if (basemapSelect.value === 'satellite') {
+    return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  }
+  return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+}
+
+function getMapThumbnail(pair) {
+  if (!pair.target) return getPlaceholderThumb('No map');
+  if (mapThumbCache.has(pair.id)) return mapThumbCache.get(pair.id);
+
+  const c = document.createElement('canvas');
+  c.width = THUMB_SIZE;
+  c.height = THUMB_SIZE;
+  const cc = c.getContext('2d');
+  cc.fillStyle = '#0f172a';
+  cc.fillRect(0, 0, THUMB_SIZE, THUMB_SIZE);
+
+  const zoom = Math.max(2, Math.min(18, map.getZoom()));
+  const centerTile = latLngToTileXY(pair.target.lat, pair.target.lng, zoom);
+  const centerPx = { x: centerTile.x * 256, y: centerTile.y * 256 };
+  const startPx = { x: centerPx.x - THUMB_SIZE / 2, y: centerPx.y - THUMB_SIZE / 2 };
+  const tileTemplate = getTileTemplate();
+
+  const startTileX = Math.floor(startPx.x / 256);
+  const endTileX = Math.floor((startPx.x + THUMB_SIZE) / 256);
+  const startTileY = Math.floor(startPx.y / 256);
+  const endTileY = Math.floor((startPx.y + THUMB_SIZE) / 256);
+
+  const maxTile = 2 ** zoom;
+  for (let tx = startTileX; tx <= endTileX; tx += 1) {
+    for (let ty = startTileY; ty <= endTileY; ty += 1) {
+      if (ty < 0 || ty >= maxTile) continue;
+      const wrappedTx = ((tx % maxTile) + maxTile) % maxTile;
+      const url = tileTemplate.replace('{z}', zoom).replace('{x}', wrappedTx).replace('{y}', ty);
+      const tile = new Image();
+      tile.crossOrigin = 'anonymous';
+      tile.src = url;
+      const dx = tx * 256 - startPx.x;
+      const dy = ty * 256 - startPx.y;
+      tile.onload = () => {
+        cc.drawImage(tile, dx, dy, 256, 256);
+        drawCrosshair(cc, '#38bdf8');
+        try {
+          const data = c.toDataURL('image/png');
+          mapThumbCache.set(pair.id, data);
+          const img = pairCards.querySelector(`.pair-card[data-pair-id="${pair.id}"] .pair-views div:nth-child(2) img`);
+          if (img) img.src = data;
+        } catch {
+          mapThumbCache.set(pair.id, getPlaceholderThumb('Map blocked'));
+        }
+      };
+      tile.onerror = () => {
+        mapThumbCache.set(pair.id, getPlaceholderThumb('Map tile error'));
+      };
+    }
+  }
+
+  drawCrosshair(cc, '#38bdf8');
+  const initial = c.toDataURL('image/png');
+  mapThumbCache.set(pair.id, initial);
+  return initial;
 }
 
 function toMeters(lat, lng) {
@@ -491,6 +687,7 @@ function gaussJordan(a, b) {
 resizeCanvasToContainer();
 drawCanvas();
 renderPairButtons();
+renderPairCards();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
