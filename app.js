@@ -32,6 +32,7 @@ const sourceCanvasWrap = canvas.parentElement;
 
 const fallbackCenter = [49.8352, -124.5247]; // Powell River, BC
 const fallbackZoom = 13;
+let elevationRequestId = 0;
 
 const map = L.map('map').setView(fallbackCenter, fallbackZoom);
 const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -41,7 +42,7 @@ const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/
   attribution: 'Tiles &copy; Esri'
 });
 
-osmLayer.addTo(map);
+satelliteLayer.addTo(map);
 
 if ('geolocation' in navigator) {
   navigator.geolocation.getCurrentPosition(
@@ -73,13 +74,48 @@ basemapSelect.addEventListener('change', (evt) => {
   renderPairCards();
 });
 
-map.on('click', (evt) => {
+map.on('click', async (evt) => {
+  const requestId = ++elevationRequestId;
+  const lat = evt.latlng.lat;
+  const lng = evt.latlng.lng;
+
+  mapStatus.textContent = `Resolving elevation for ${lat.toFixed(5)}, ${lng.toFixed(5)}…`;
+
+  let elevation = null;
+  try {
+    elevation = await lookupElevation(lat, lng);
+    if (requestId === elevationRequestId) {
+      mapStatus.textContent = Number.isFinite(elevation)
+        ? `Elevation lookup succeeded: ${elevation.toFixed(2)} m (Open-Meteo elevation API).`
+        : 'Elevation lookup returned no data for this location.';
+    }
+  } catch {
+    if (requestId === elevationRequestId) {
+      mapStatus.textContent = 'Elevation lookup failed; saved point with latitude/longitude only.';
+    }
+  }
+
   upsertPair(selectedPair, {
-    target: { lat: evt.latlng.lat, lng: evt.latlng.lng, elevation: evt.latlng.alt ?? null }
+    target: { lat, lng, elevation }
   });
   refreshMarkers();
   solveAndRender();
 });
+
+async function lookupElevation(lat, lng) {
+  const apiUrl = new URL('https://api.open-meteo.com/v1/elevation');
+  apiUrl.searchParams.set('latitude', String(lat));
+  apiUrl.searchParams.set('longitude', String(lng));
+
+  const response = await fetch(apiUrl);
+  if (!response.ok) {
+    throw new Error(`Elevation API returned HTTP ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const value = Array.isArray(payload.elevation) ? payload.elevation[0] : payload.elevation;
+  return Number.isFinite(value) ? value : null;
+}
 
 fileInput.addEventListener('change', async (evt) => {
   const files = Array.from(evt.target.files || []);
