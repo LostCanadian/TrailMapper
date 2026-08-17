@@ -451,7 +451,7 @@ function getCanvasPoint(evt) {
 }
 
 function baseFitScale() {
-  return Math.min(canvas.width / sourceImage.width, canvas.height / sourceImage.height);
+  return Math.min(canvas.width / sourceImage.naturalWidth, canvas.height / sourceImage.naturalHeight);
 }
 
 function getView() {
@@ -460,8 +460,8 @@ function getView() {
   }
   if (!sourceView) {
     const scale = baseFitScale();
-    const width = sourceImage.width * scale;
-    const height = sourceImage.height * scale;
+    const width = sourceImage.naturalWidth * scale;
+    const height = sourceImage.naturalHeight * scale;
     sourceView = {
       zoom: 1,
       minZoom: 1,
@@ -478,7 +478,7 @@ function canvasToImage(canvasX, canvasY) {
   const displayScale = baseFitScale() * view.zoom;
   const imageX = (canvasX - view.offsetX) / displayScale;
   const imageY = (canvasY - view.offsetY) / displayScale;
-  if (imageX < 0 || imageY < 0 || imageX > sourceImage.width || imageY > sourceImage.height) {
+  if (imageX < 0 || imageY < 0 || imageX > sourceImage.naturalWidth || imageY > sourceImage.naturalHeight) {
     return null;
   }
   return { x: imageX, y: imageY };
@@ -500,8 +500,8 @@ function drawCanvas() {
 
   const view = getView();
   const drawScale = baseFitScale() * view.zoom;
-  const drawWidth = sourceImage.width * drawScale;
-  const drawHeight = sourceImage.height * drawScale;
+  const drawWidth = sourceImage.naturalWidth * drawScale;
+  const drawHeight = sourceImage.naturalHeight * drawScale;
 
   ctx.drawImage(sourceImage, view.offsetX, view.offsetY, drawWidth, drawHeight);
 
@@ -617,14 +617,14 @@ function getPlaceholderThumb(label) {
   return c.toDataURL('image/png');
 }
 
-function drawCrosshair(cc, color) {
+function drawCrosshair(cc, color, x = THUMB_SIZE / 2, y = THUMB_SIZE / 2) {
   cc.strokeStyle = color;
   cc.lineWidth = 1.5;
   cc.beginPath();
-  cc.moveTo(THUMB_SIZE / 2, 10);
-  cc.lineTo(THUMB_SIZE / 2, THUMB_SIZE - 10);
-  cc.moveTo(10, THUMB_SIZE / 2);
-  cc.lineTo(THUMB_SIZE - 10, THUMB_SIZE / 2);
+  cc.moveTo(x, Math.max(0, y - 12));
+  cc.lineTo(x, Math.min(THUMB_SIZE, y + 12));
+  cc.moveTo(Math.max(0, x - 12), y);
+  cc.lineTo(Math.min(THUMB_SIZE, x + 12), y);
   cc.stroke();
 }
 
@@ -637,12 +637,16 @@ function getSourceThumbnail(pair) {
   c.height = THUMB_SIZE;
   const cc = c.getContext('2d');
 
-  const cropSize = Math.min(120, sourceImage.width, sourceImage.height);
-  const sx = Math.max(0, Math.min(sourceImage.width - cropSize, pair.source.x - cropSize / 2));
-  const sy = Math.max(0, Math.min(sourceImage.height - cropSize, pair.source.y - cropSize / 2));
+  const imageWidth = sourceImage.naturalWidth;
+  const imageHeight = sourceImage.naturalHeight;
+  const cropSize = Math.min(120, imageWidth, imageHeight);
+  const sx = Math.max(0, Math.min(imageWidth - cropSize, pair.source.x - cropSize / 2));
+  const sy = Math.max(0, Math.min(imageHeight - cropSize, pair.source.y - cropSize / 2));
+  const markerX = ((pair.source.x - sx) / cropSize) * THUMB_SIZE;
+  const markerY = ((pair.source.y - sy) / cropSize) * THUMB_SIZE;
 
   cc.drawImage(sourceImage, sx, sy, cropSize, cropSize, 0, 0, THUMB_SIZE, THUMB_SIZE);
-  drawCrosshair(cc, '#22c55e');
+  drawCrosshair(cc, '#22c55e', markerX, markerY);
   const data = c.toDataURL('image/png');
   sourceThumbCache.set(pair.id, data);
   return data;
