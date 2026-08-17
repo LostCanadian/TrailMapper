@@ -1,3 +1,5 @@
+import { lookupElevation } from './elevation.mjs';
+
 const fileInput = document.getElementById('fileInput');
 const importStatus = document.getElementById('importStatus');
 const canvas = document.getElementById('sourceCanvas');
@@ -123,15 +125,14 @@ map.on('click', async (evt) => {
 
   let elevation = null;
   try {
-    elevation = await lookupElevation(lat, lng);
+    const result = await lookupElevation(lat, lng);
+    elevation = result.elevation;
     if (requestId === elevationRequestId) {
-      mapStatus.textContent = Number.isFinite(elevation)
-        ? `Elevation lookup succeeded: ${elevation.toFixed(2)} m (NRCan CDEM).`
-        : 'Elevation lookup returned no data for this location.';
+      mapStatus.textContent = `Elevation lookup succeeded: ${elevation.toFixed(2)} m (${result.provider}).`;
     }
-  } catch {
+  } catch (error) {
     if (requestId === elevationRequestId) {
-      mapStatus.textContent = 'Elevation lookup failed; saved point with latitude/longitude only.';
+      mapStatus.textContent = `Elevation lookup failed; saved latitude/longitude only. ${error.message}`;
     }
   }
 
@@ -181,21 +182,6 @@ function setGpxTrack(coordinates) {
   if (bounds.isValid()) {
     map.fitBounds(bounds, { padding: [20, 20] });
   }
-}
-
-async function lookupElevation(lat, lng) {
-  const apiUrl = new URL('https://api.nrcan.gc.ca/elevation/cdem/altitude');
-  apiUrl.searchParams.set('lat', String(lat));
-  apiUrl.searchParams.set('lon', String(lng));
-
-  const response = await fetch(apiUrl);
-  if (!response.ok) {
-    throw new Error(`Elevation API returned HTTP ${response.status}`);
-  }
-
-  const payload = await response.json();
-  const value = payload.altitude;
-  return Number.isFinite(value) ? value : null;
 }
 
 fileInput.addEventListener('change', async (evt) => {
