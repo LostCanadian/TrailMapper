@@ -2,7 +2,9 @@ const ELEVATION_PROVIDERS = [
   {
     name: 'NRCan CDEM',
     buildUrl(lat, lng) {
-      const url = new URL('https://api.nrcan.gc.ca/elevation/cdem/altitude');
+      // Documentation (which still shows HTTP, although the service now requires HTTPS):
+      // https://natural-resources.canada.ca/science-data/data-analysis/geospatial-data-tools-services/elevation-api
+      const url = new URL('https://geogratis.gc.ca/services/elevation/cdem/altitude');
       url.searchParams.set('lat', String(lat));
       url.searchParams.set('lon', String(lng));
       return url;
