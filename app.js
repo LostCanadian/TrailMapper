@@ -126,7 +126,7 @@ map.on('click', async (evt) => {
     elevation = await lookupElevation(lat, lng);
     if (requestId === elevationRequestId) {
       mapStatus.textContent = Number.isFinite(elevation)
-        ? `Elevation lookup succeeded: ${elevation.toFixed(2)} m (Open-Meteo elevation API).`
+        ? `Elevation lookup succeeded: ${elevation.toFixed(2)} m (NRCan CDEM).`
         : 'Elevation lookup returned no data for this location.';
     }
   } catch {
@@ -184,9 +184,9 @@ function setGpxTrack(coordinates) {
 }
 
 async function lookupElevation(lat, lng) {
-  const apiUrl = new URL('https://api.open-meteo.com/v1/elevation');
-  apiUrl.searchParams.set('latitude', String(lat));
-  apiUrl.searchParams.set('longitude', String(lng));
+  const apiUrl = new URL('https://api.nrcan.gc.ca/elevation/cdem/altitude');
+  apiUrl.searchParams.set('lat', String(lat));
+  apiUrl.searchParams.set('lon', String(lng));
 
   const response = await fetch(apiUrl);
   if (!response.ok) {
@@ -194,7 +194,7 @@ async function lookupElevation(lat, lng) {
   }
 
   const payload = await response.json();
-  const value = Array.isArray(payload.elevation) ? payload.elevation[0] : payload.elevation;
+  const value = payload.altitude;
   return Number.isFinite(value) ? value : null;
 }
 

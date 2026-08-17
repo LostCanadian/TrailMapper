@@ -7,6 +7,7 @@ This repository now includes a browser-based Progressive Web App that supports:
 - Picking paired control points in source space and map space.
 - Switching reference basemaps between OpenStreetMap and satellite imagery (Esri World Imagery).
 - Defaulting the map to the user's current location when available, with Powell River, BC as fallback.
+- Looking up map-point elevations from Natural Resources Canada's CDEM elevation service.
 - Exporting all control-point pairs to JSON for downstream workflows.
 - Offline caching of core app shell via a service worker.
 
