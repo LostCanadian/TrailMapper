@@ -10,7 +10,10 @@ test('queries NRCan with its documented latitude and longitude parameters', asyn
     return { ok: true, json: async () => ({ altitude: 112.75 }) };
   });
 
-  assert.equal(requestedUrl.origin + requestedUrl.pathname, 'https://api.nrcan.gc.ca/elevation/cdem/altitude');
+  assert.equal(
+    requestedUrl.toString(),
+    'https://geogratis.gc.ca/services/elevation/cdem/altitude?lat=49.8352&lon=-124.5247'
+  );
   assert.equal(requestedUrl.searchParams.get('lat'), '49.8352');
   assert.equal(requestedUrl.searchParams.get('lon'), '-124.5247');
   assert.deepEqual(result, { elevation: 112.75, provider: 'NRCan CDEM' });
