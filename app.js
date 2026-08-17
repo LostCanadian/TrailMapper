@@ -6,9 +6,6 @@ const pairCards = document.getElementById('pairCards');
 const addPairBtn = document.getElementById('addPairBtn');
 const exportPairsBtn = document.getElementById('exportPairsBtn');
 const exportStatus = document.getElementById('exportStatus');
-const fitStatus = document.getElementById('fitStatus');
-const fitParams = document.getElementById('fitParams');
-const residualsEl = document.getElementById('residuals');
 const basemapSelect = document.getElementById('basemapSelect');
 const mapStatus = document.getElementById('mapStatus');
 const gpxInput = document.getElementById('gpxInput');
@@ -30,7 +27,6 @@ const THUMB_SIZE = 120;
 let metresPerPixel = 0.05;
 let sourceView = null;
 let dragState = null;
-const sourceCanvasWrap = canvas.parentElement;
 
 const fallbackCenter = [49.8352, -124.5247]; // Powell River, BC
 const fallbackZoom = 13;
@@ -143,7 +139,6 @@ map.on('click', async (evt) => {
     target: { lat, lng, elevation }
   });
   refreshMarkers();
-  solveAndRender();
 });
 
 function parseGpxTrack(rawText) {
@@ -228,7 +223,7 @@ fileInput.addEventListener('change', async (evt) => {
       metresPerPixel = parsedMetresPerPixel;
       sourceScaleInput.value = String(metresPerPixel);
     }
-    importStatus.textContent = `Imported ${imported.length} source points. Units: ${parsed.units || 'assumed metres'}.`;
+    importStatus.textContent = `Imported ${imported.length} source points.`;
   } else {
     importStatus.textContent = image
       ? 'Loaded image. Add source/map points to georeference.'
@@ -237,7 +232,6 @@ fileInput.addEventListener('change', async (evt) => {
 
   renderPairCards();
   drawCanvas();
-  solveAndRender();
 });
 
 sourceScaleInput.addEventListener('change', () => {
@@ -247,8 +241,6 @@ sourceScaleInput.addEventListener('change', () => {
     return;
   }
   metresPerPixel = value;
-  solveAndRender();
-  drawCanvas();
 });
 
 resetSourceViewBtn.addEventListener('click', () => {
@@ -256,11 +248,12 @@ resetSourceViewBtn.addEventListener('click', () => {
   drawCanvas();
 });
 
-zoomInSourceBtn.addEventListener('click', () => applyZoom(1.1));
-zoomOutSourceBtn.addEventListener('click', () => applyZoom(1 / 1.1));
+zoomInSourceBtn.addEventListener('click', () => applyZoom(1.25));
+zoomOutSourceBtn.addEventListener('click', () => applyZoom(1 / 1.25));
 
 window.addEventListener('resize', () => {
   resizeCanvasToContainer();
+  sourceView = null;
   drawCanvas();
 });
 
@@ -277,7 +270,8 @@ exportPairsBtn.addEventListener('click', () => {
   const exportPayload = {
     exportedAt: new Date().toISOString(),
     schemaVersion: 1,
-    units: 'metres',
+    sourceUnits: 'pixels',
+    targetUnits: 'WGS84 degrees',
     metresPerPixel,
     pairs: completePairs.map((pair) => ({
       id: pair.id,
@@ -347,7 +341,6 @@ canvas.addEventListener('pointerup', (evt) => {
     if (!sourcePoint) return;
     upsertPair(selectedPair, { source: sourcePoint });
     drawCanvas();
-    solveAndRender();
   }
 });
 
@@ -367,16 +360,15 @@ canvas.addEventListener(
     const before = canvasToImage(point.x, point.y);
     if (!before) return;
 
-    const zoomFactor = evt.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const zoomFactor = evt.deltaY < 0 ? 1.25 : 1 / 1.25;
     applyZoom(zoomFactor, point, before);
   },
   { passive: false }
 );
 
 function resizeCanvasToContainer() {
-  const rect = sourceCanvasWrap.getBoundingClientRect();
-  const displayWidth = Math.max(1, Math.round(rect.width));
-  const displayHeight = Math.max(1, Math.round(rect.height));
+  const displayWidth = Math.max(1, Math.round(canvas.clientWidth));
+  const displayHeight = Math.max(1, Math.round(canvas.clientHeight));
   if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
     canvas.width = displayWidth;
     canvas.height = displayHeight;
@@ -437,7 +429,6 @@ function deletePair(id) {
   renderPairCards();
   refreshMarkers();
   drawCanvas();
-  solveAndRender();
 }
 
 function loadImage(url) {
@@ -451,11 +442,11 @@ function loadImage(url) {
 
 function getCanvasPoint(evt) {
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
+  const scaleX = canvas.width / canvas.clientWidth;
+  const scaleY = canvas.height / canvas.clientHeight;
   return {
-    x: (evt.clientX - rect.left) * scaleX,
-    y: (evt.clientY - rect.top) * scaleY
+    x: (evt.clientX - rect.left - canvas.clientLeft) * scaleX,
+    y: (evt.clientY - rect.top - canvas.clientTop) * scaleY
   };
 }
 
@@ -473,7 +464,7 @@ function getView() {
     const height = sourceImage.height * scale;
     sourceView = {
       zoom: 1,
-      minZoom: 0.3,
+      minZoom: 1,
       offsetX: (canvas.width - width) / 2,
       offsetY: (canvas.height - height) / 2
     };
@@ -524,7 +515,7 @@ function drawCanvas() {
     ctx.fillText(String(pair.id), x + 8, y - 12);
   });
 
-  sourceViewStatus.textContent = `Source view: zoom ${(view.zoom * 100).toFixed(0)}%, offset (${view.offsetX.toFixed(1)}, ${view.offsetY.toFixed(1)}), scale ${metresPerPixel.toFixed(4)} m/px.`;
+  sourceViewStatus.textContent = `Source view: zoom ${(view.zoom * 100).toFixed(0)}%, offset (${view.offsetX.toFixed(1)}, ${view.offsetY.toFixed(1)}).`;
 }
 
 function refreshMarkers() {
@@ -727,93 +718,6 @@ function getMapThumbnail(pair) {
   const initial = c.toDataURL('image/png');
   mapThumbCache.set(pair.id, initial);
   return initial;
-}
-
-function toMeters(lat, lng) {
-  const x = (lng * 20037508.34) / 180;
-  const y = Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) / (Math.PI / 180);
-  return { x, y: (y * 20037508.34) / 180 };
-}
-
-function solveAndRender() {
-  const complete = pairs.filter((p) => p.source && p.target);
-  if (complete.length < 3) {
-    fitStatus.textContent = 'Need 3 completed point pairs.';
-    fitParams.textContent = '';
-    residualsEl.innerHTML = '';
-    return;
-  }
-
-  const A = [];
-  const b = [];
-  complete.forEach((pair) => {
-    const s = pair.source;
-    const scaledX = s.x * metresPerPixel;
-    const scaledY = s.y * metresPerPixel;
-    const t = toMeters(pair.target.lat, pair.target.lng);
-    A.push([scaledX, scaledY, 1, 0, 0, 0]);
-    b.push(t.x);
-    A.push([0, 0, 0, scaledX, scaledY, 1]);
-    b.push(t.y);
-  });
-
-  const normal = Array.from({ length: 6 }, () => Array(6).fill(0));
-  const rhs = Array(6).fill(0);
-
-  for (let r = 0; r < A.length; r += 1) {
-    for (let i = 0; i < 6; i += 1) {
-      rhs[i] += A[r][i] * b[r];
-      for (let j = 0; j < 6; j += 1) normal[i][j] += A[r][i] * A[r][j];
-    }
-  }
-
-  let params;
-  try {
-    params = gaussJordan(normal, rhs);
-  } catch (err) {
-    fitStatus.textContent = `Could not solve transform: ${err.message}`;
-    fitParams.textContent = '';
-    residualsEl.innerHTML = '';
-    return;
-  }
-
-  const residuals = complete.map((pair) => {
-    const s = pair.source;
-    const sx = s.x * metresPerPixel;
-    const sy = s.y * metresPerPixel;
-    const t = toMeters(pair.target.lat, pair.target.lng);
-    const x = params[0] * sx + params[1] * sy + params[2];
-    const y = params[3] * sx + params[4] * sy + params[5];
-    return { id: pair.id, error: Math.hypot(x - t.x, y - t.y) };
-  });
-  const rms = Math.sqrt(residuals.reduce((sum, r) => sum + r.error ** 2, 0) / residuals.length);
-
-  fitStatus.textContent = `Solved with ${complete.length} points. RMS error: ${rms.toFixed(2)} m`;
-  fitParams.textContent = params.map((v) => v.toFixed(6)).join(', ');
-  residualsEl.innerHTML = residuals.map((r) => `<li>Pair #${r.id}: ${r.error.toFixed(2)} m</li>`).join('');
-}
-
-function gaussJordan(a, b) {
-  const n = b.length;
-  for (let i = 0; i < n; i += 1) {
-    let pivot = i;
-    for (let r = i + 1; r < n; r += 1) if (Math.abs(a[r][i]) > Math.abs(a[pivot][i])) pivot = r;
-    [a[i], a[pivot]] = [a[pivot], a[i]];
-    [b[i], b[pivot]] = [b[pivot], b[i]];
-
-    const d = a[i][i];
-    if (Math.abs(d) < 1e-12) throw new Error('degenerate control points');
-    for (let c = i; c < n; c += 1) a[i][c] /= d;
-    b[i] /= d;
-
-    for (let r = 0; r < n; r += 1) {
-      if (r === i) continue;
-      const f = a[r][i];
-      for (let c = i; c < n; c += 1) a[r][c] -= f * a[i][c];
-      b[r] -= f * b[i];
-    }
-  }
-  return b;
 }
 
 resizeCanvasToContainer();

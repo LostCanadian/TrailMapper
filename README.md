@@ -8,13 +8,12 @@ This repository now includes a browser-based Progressive Web App that supports:
 - Switching reference basemaps between OpenStreetMap and satellite imagery (Esri World Imagery).
 - Defaulting the map to the user's current location when available, with Powell River, BC as fallback.
 - Exporting all control-point pairs to JSON for downstream workflows.
-- Solving an affine georeference transform and reporting RMS/residual errors in metres.
 - Offline caching of core app shell via a service worker.
 
 ## Data assumptions for current importer
 - Input JSON supports either `points: [{x, y}]` or `controlPoints: [{sourceX, sourceY}]`.
-- Export JSON includes `pairs[]` with `source` + `target` values and a completion flag.
-- Source units are treated as metres.
+- Export JSON includes completed `pairs[]` with pixel-based `source` and geographic `target` values, plus the
+  source image's `metresPerPixel` scale for downstream georeferencing.
 - Unknown fields are ignored so schema changes are non-breaking.
 
 ## Run locally

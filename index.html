@@ -12,8 +12,8 @@
     <main>
       <h1>TrailMapper</h1>
       <p class="muted">
-        Upload file(s) from trail export (image + optional JSON), click matching source/map points, then solve affine
-        georeference in metre units.
+        Upload file(s) from trail export (image + optional JSON), click matching source/map points, then export the
+        point pairs for use in your georeferencing workflow.
       </p>
 
       <section class="grid">
@@ -66,21 +66,6 @@
         <p id="exportStatus" class="muted"></p>
       </section>
 
-      <section class="panel">
-        <h2>Georeference result (Affine)</h2>
-        <p id="fitStatus">Need 3 completed point pairs.</p>
-        <pre id="fitParams"></pre>
-        <ul id="residuals"></ul>
-      </section>
-
-      <section class="panel assumptions">
-        <h3>Import assumptions</h3>
-        <ul>
-          <li>JSON may include <code>points:[{x,y}]</code> or <code>controlPoints:[{sourceX,sourceY}]</code>.</li>
-          <li>Units are assumed to be metres (or convertible to metres upstream).</li>
-          <li>Schema may evolve; importer is intentionally tolerant and ignores unknown fields.</li>
-        </ul>
-      </section>
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
