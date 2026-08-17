@@ -1,4 +1,4 @@
-const CACHE = 'trailmapper-v2';
+const CACHE = 'trailmapper-v4';
 const BASE = self.location.pathname.replace(/\/[^/]*$/, '/');
 const ASSETS = [
   BASE,
